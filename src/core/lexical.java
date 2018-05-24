@@ -1,4 +1,5 @@
 package core;
+        import javax.xml.stream.FactoryConfigurationError;
         import java.io.*;
         import java.lang.*;
         import java.util.ArrayList;
@@ -24,6 +25,8 @@ public class lexical {
     private ArrayList<token> tokens;
     private String errorMsg;
 
+    private Boolean exception;
+
     public lexical() throws Exception {
         keyw = new ArrayList<>();
         identifier = new ArrayList<>();
@@ -35,9 +38,11 @@ public class lexical {
         col = 1;
         pre_mark = new ArrayBlockingQueue<>(100);
         strBuffer = "";
+        errorMsg = "";
         load_delimiter();
         load_keyw();
         load_opr();
+        exception = false;
     }
     // 加载资源
     void load_keyw() throws Exception{
@@ -72,7 +77,6 @@ public class lexical {
         File f = new File(path);
         src = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
         // System.out.println(src.readLine());
-        src.mark((int) f.length());
         row = 1;
         col = 1;
     }
@@ -235,6 +239,7 @@ public class lexical {
         else if (currentChar == '\n'){
             row += 1;
             col = 1;
+            src.mark(65535);
         }
 
         else if (currentChar == '\t')
@@ -328,16 +333,22 @@ public class lexical {
             else if (may_deli(currentChar).size() > 0)
                 scanOpr_Deli(may_deli(currentChar));
             else {
-                raiseError(null);
+                raiseError("非法标识");
                 break;
             }
+            if (exception)
+                break;
         }
     }
-    String raiseError(String msg){
-        System.out.println("词法错误：" + row + ", " + col);
-        System.out.println("CurrentChar:" + currentChar);
-        System.out.println(msg);
-        errorMsg = "词法错误：" + row + ", " + col + "\nCurrentChar:" + currentChar + "\n" + msg;
+    String raiseError(String msg) throws IOException {
+        src.reset();
+        errorMsg += src.readLine().replace("\t", "    ") + '\n';
+        for (int i=1; i < col - 1; i++)
+            errorMsg += ' ';
+        errorMsg += "^\n";
+        errorMsg += "词法错误：(" + row + ", " + col + ") " + msg;
+        System.out.println(errorMsg);
+        exception = true;
         return errorMsg;
     }
 
@@ -362,7 +373,7 @@ public class lexical {
         l.scan_script();
         System.out.println("词法分析...");
         l.analyze();
-        System.out.println(l.errorMsg);
+        //System.out.println(l.errorMsg);
     }
 
     public class token {
@@ -393,29 +404,28 @@ public class lexical {
             return str + "\t< " + type + ", " + "-->\n";
         }
     }
-}
+    class mark {
+        Integer row;
+        Integer col;
+        String symble;
 
-class mark {
-    Integer row;
-    Integer col;
-    String symble;
+        mark(Integer r, Integer c, String s) {
+            row = r;
+            col = c;
+            symble = s;
+        }
 
-    mark(Integer r, Integer c, String s) {
-        row = r;
-        col = c;
-        symble = s;
-    }
+        public Integer getRow() {
+            return row;
+        }
 
-    public Integer getRow() {
-        return row;
-    }
+        public Integer getCol() {
+            return col;
+        }
 
-    public Integer getCol() {
-        return col;
-    }
-
-    public String getSymble() {
-        return symble;
+        public String getSymble() {
+            return symble;
+        }
     }
 }
 
