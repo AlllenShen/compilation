@@ -136,16 +136,17 @@ public class lexical {
         {
             int id_index = match_identifier(strBuffer, true);
             System.out.println(strBuffer + "\t < 标识符, " + id_index + ">");
-            tokens.add(new token(strBuffer,"标识符", id_index));
+            tokens.add(new token(strBuffer,"标识符", id_index, row, col));
             strBuffer = "";
             return;
         }
         System.out.println(strBuffer + "\t < " + strBuffer + ", -->");
-        tokens.add(new token(strBuffer, strBuffer, -1));
+        tokens.add(new token(strBuffer, "关键字", -1, row, col));
         strBuffer = "";
     }
     void scanNum() throws Exception {
-        while (Character.isDigit(currentChar))
+        while (Character.isDigit(currentChar)
+                || currentChar == '.' && strBuffer.indexOf('.') == -1)
         {
             strBuffer += currentChar;
             getChar();
@@ -154,14 +155,15 @@ public class lexical {
         if (may_deli(currentChar).size() > 0 || currentChar == ' ') {
             int const_index = match_constant(strBuffer, true);
             System.out.println(strBuffer + "\t < 常数, " + const_index + ">");
-            tokens.add(new token(strBuffer,"常数", const_index));
+            tokens.add(new token(strBuffer,"常数", const_index, row, col));
         }
         else
             raiseError("非法标识");
         strBuffer = "";
         move();
     }
-    void scanOpr_Deli(ArrayList<String> may) throws Exception {
+    void scanOpr_Deli(ArrayList<String> may, Boolean type) throws Exception {
+        // type 0-op 1-deli
         strBuffer += currentChar;
         while ( may_opr(currentChar).size() > 0
                 || may_deli(currentChar).size() > 0) {
@@ -176,7 +178,10 @@ public class lexical {
                 }
                 else {
                     System.out.println(strBuffer + "\t < " + strBuffer + ", -->");
-                    tokens.add(new token(strBuffer, strBuffer, -1));
+                    if (type)
+                        tokens.add(new token(strBuffer, "界符", -1, row, col));
+                    else
+                        tokens.add(new token(strBuffer, "运算符", -1, row, col));
                     strBuffer = "";
                     move();
                     break;
@@ -329,9 +334,9 @@ public class lexical {
             else if (Character.isDigit(currentChar))
                 scanNum();
             else if (may_opr(currentChar).size() > 0)
-                scanOpr_Deli(may_opr(currentChar));
+                scanOpr_Deli(may_opr(currentChar), false);
             else if (may_deli(currentChar).size() > 0)
-                scanOpr_Deli(may_deli(currentChar));
+                scanOpr_Deli(may_deli(currentChar), true);
             else {
                 raiseError("非法标识");
                 break;
@@ -373,6 +378,10 @@ public class lexical {
         l.scan_script();
         System.out.println("词法分析...");
         l.analyze();
+        for (lexical.token token : l.getTokens())
+            System.out.println(token.toString());
+        if (l.getErrorMsg() != null)
+            System.out.println(l.getErrorMsg());
         //System.out.println(l.errorMsg);
     }
 
@@ -380,11 +389,15 @@ public class lexical {
         private String str;
         private String type;
         private Integer pos;
+        private Integer row;
+        private Integer col;
 
-        token(String s, String t, Integer p){
+        token(String s, String t, Integer p, Integer r, Integer c){
             str = s;
             type = t;
             pos = p;
+            row = r;
+            col = c;
         }
 
         public String getType() {
@@ -400,8 +413,8 @@ public class lexical {
         @Override
         public String toString() {
             if (pos > 0)
-                return str + "\t< " + type + ", " + pos + ">\n";
-            return str + "\t< " + type + ", " + "-->\n";
+                return str + "\t< " + str + ", " + pos + ">\t" + type + "\t( " + row + ", " + col + ")\n";
+            return str + "\t< " + str + ", " + "-->\t" + type + "\t( " + row + ", " + col + ")\n";
         }
     }
     class mark {
