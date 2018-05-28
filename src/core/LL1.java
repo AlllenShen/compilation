@@ -12,8 +12,8 @@ public class LL1 {
 }
 
 class grammar {
-    private ArrayList<token> nontermTokens;
-    private ArrayList<token> termTokens;
+    private ArrayList<Token> nontermTokens;
+    private ArrayList<Token> termTokens;
     private ArrayList<Production> productions;
 
     grammar() throws IOException {
@@ -27,38 +27,38 @@ class grammar {
         BufferedReader token_f = new BufferedReader(new FileReader("tokens.txt"));
         String lineBuffer = token_f.readLine();
         for (String tw : lineBuffer.split(" "))
-            nontermTokens.add(new token(tw, false));
+            nontermTokens.add(new Token(tw, false));
         lineBuffer = token_f.readLine();
         for (String tw : lineBuffer.split(" "))
-            termTokens.add(new token(tw, true));
+            termTokens.add(new Token(tw, true));
         BufferedReader produ_f = new BufferedReader(new FileReader("productions.txt"));
         while ((lineBuffer = produ_f.readLine()) != null)
             productions.add(new Production(lineBuffer.split("->")[0], lineBuffer.split("->")[1]));
         for (Production p : productions){
-            for (token t : nontermTokens)
+            for (Token t : nontermTokens)
                 if (t.equals(p.left)){
                     t.setGenerate(p.right);
                     continue;
                 }
-            for (token t : termTokens)
+            for (Token t : termTokens)
                 if (t.equals(p.left))
                     t.setGenerate(p.right);
         }
     }
     Boolean isTokens(String c) {
-        for (token t : nontermTokens)
+        for (Token t : nontermTokens)
             if (t.getName().equals(c))
                 return true;
-        for (token t : termTokens)
+        for (Token t : termTokens)
             if (t.getName().equals(c))
                 return true;
         return false;
     }
-    token getToken(String s){
-        for (token t : nontermTokens)
+    Token getToken(String s){
+        for (Token t : nontermTokens)
             if (t.getName().equals(s))
                 return t;
-        for (token t : termTokens)
+        for (Token t : termTokens)
             if (t.getName().equals(s))
                 return t;
         return null;
@@ -66,17 +66,15 @@ class grammar {
 
     public static void main(String[] args) throws IOException {
         grammar g = new grammar();
-//        for (token t : g.nontermTokens.get(0).first())
-//            System.out.println(t);
-        ArrayList<token> a = g.nontermTokens.get(1).first();
+        g.nontermTokens.get(1).follow();
     }
-    class token{ //标识符
+    class Token { //标识符
         private String name;
         private Boolean terminal;
         private ArrayList<Statement> generate;
-        private ArrayList<token> FIRST;
-        private ArrayList<token> FOLLOW;
-        ArrayList<token> first(){
+        private ArrayList<Token> FIRST;
+        private ArrayList<Token> FOLLOW;
+        ArrayList<Token> first(){
             if (FIRST.size() > 0)
                 return FIRST;
             if (terminal) {
@@ -97,20 +95,63 @@ class grammar {
                     FIRST.addAll(state.s.get(i).first());
                 }
             }
-
+            clean();
             return FIRST;
         }
-
-        ArrayList<String> follow(){
-            return null;
+        ArrayList<Token> follow(){
+            if (FOLLOW.size() > 0)
+                return FOLLOW;
+            FOLLOW.add(getToken("#"));
+            for (Production p : productions){
+                for (Statement s : p.right){
+                    int index = s.hasToken(name);
+                    if (index == -1)
+                        continue;
+                    if (index == s.s.size() - 1 || s.s.get(index+1).inFIRST("ε"))
+                        FOLLOW.addAll(p.left.follow());
+                    else
+                        FOLLOW.addAll(s.s.get(index+1).first());
+                }
+            }
+            clean();
+            return FOLLOW;
         }
-
-        token(String n, Boolean t, ArrayList<Statement> g) {
+        Boolean inFIRST(String s){
+            if (FIRST.size() == 0)
+                first();
+            for (Token t : FIRST)
+                if (t.name.equals(s))
+                    return true;
+            return false;
+        }
+        Boolean inFOLLOW(String s){
+            if (FOLLOW.size() == 0)
+                first();
+            for (Token t : FOLLOW)
+                if (t.name.equals(s))
+                    return true;
+            return false;
+        }
+        void clean(){
+            for(int i = 0; i < FIRST.size(); i++)
+                for(int j = i + 1; j < FIRST.size(); j++)
+                    if(FIRST.get(i) == FIRST.get(j)){
+                        FIRST.remove(j);
+                        j--;
+                    }
+            for(int i = 0; i < FOLLOW.size(); i++)
+                for(int j = i + 1; j < FOLLOW.size(); j++)
+                    if(FOLLOW.get(i) == FOLLOW.get(j)){
+                        FOLLOW.remove(j);
+                        j--;
+                    }
+        }
+        Token(String n, Boolean t, ArrayList<Statement> g) {
             name = n;
             terminal = t;
             generate = g;
         }
-        token(String n, Boolean t) {
+        Token(String n, Boolean t) {
             name = n;
             terminal = t;
             generate = new ArrayList<>();
@@ -126,11 +167,10 @@ class grammar {
             return name;
         }
     }
-
     class Statement { // 语句
-        ArrayList<token> s;
+        ArrayList<Token> s;
 
-        Statement(ArrayList<token> s_){
+        Statement(ArrayList<Token> s_){
             s = s_;
         }
         Statement(String s_){
@@ -143,21 +183,23 @@ class grammar {
             }
 
         }
-        token firstToken(){
-            return s.get(0);
+        Integer hasToken(String t_str){
+            for (Token t : s)
+                if (t.name.equals(t_str))
+                    return s.indexOf(t);
+            return -1;
         }
 
         @Override
         public String toString() {
             StringBuilder str = new StringBuilder();
-            for (token t : s)
+            for (Token t : s)
                 str.append(t.getName());
             return str.toString();
         }
     }
-
     class Production { // 产生式
-        token left;
+        Token left;
         ArrayList<Statement> right;
 
         Production(String l, String r) {
@@ -173,7 +215,7 @@ class grammar {
             left = getToken(l);
         }
 
-        public token getLeft() {
+        public Token getLeft() {
             return left;
         }
 
@@ -185,5 +227,4 @@ class grammar {
             return s;
         }
     }
-
 }
