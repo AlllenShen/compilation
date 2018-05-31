@@ -1,5 +1,5 @@
-E->TG
-G->+TG|-TG|ε
-T->FS
-S->*FS|/FS|ε
-F->(E)|i|ε
+E->TK
+K->+T|ε
+T->FM
+M->*F|ε
+F->(E)|i
