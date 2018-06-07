@@ -4,26 +4,136 @@ import jdk.nashorn.internal.runtime.regexp.joni.exception.ValueException;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Set;
+import java.util.Stack;
 
 public class LL1 {
+    private String str;
+    private Stack<Grammar.Token> analyzeStack;
+    private Grammar g;
+    private int strP;
+    private Exception error;
+    private String action;
+    private String useP;
+    private boolean finish;
+    private Grammar.Token begin;
+
+    public LL1(String s) throws IOException {
+        str = s + "#";
+        g = new Grammar();
+        strP = 0;
+        action = "初始化";
+        finish = false;
+        analyzeStack = new Stack<>();
+        begin = g.getToken("E");
+        analyzeStack.push(g.getToken("#"));
+        analyzeStack.push(begin);
+    }
+
+    public boolean analyze(){
+        if (analyzeStack.peek().getName().equals("#")
+                && str.charAt(strP) == '#') {
+            finish = true;
+            return true;
+        }
+        if (analyzeStack.peek().getName().equals(String.valueOf(str.charAt(strP)))
+                && str.charAt(strP) != '#'){
+            analyzeStack.pop();
+            action = "栈顶匹配";
+            next();
+            finish = false;
+            return false;
+        }
+        if (!analyzeStack.peek().isTerminal()){
+            int nonIndex = g.indexOfnonT(analyzeStack.peek().getName());
+            int termIndex = g.indexOftermT(String.valueOf(str.charAt(strP)));
+            if (termIndex == -1) {
+                error = new ValueException("输入字符不匹配");
+                action = "error:输入字符不匹配";
+                finish = true;
+                return true;
+            }
+            Grammar.Production p = g.M(nonIndex, termIndex);
+            if (p == null) {
+                error = new ValueException("输入字符不匹配");
+                action = "error:输入字符不匹配";
+                finish = true;
+                return true;
+            }
+            analyzeStack.pop();
+            useP = p.toString();
+            String s = "";
+            for (int i=p.right.get(0).s.size() - 1; i >= 0 ; i--) {
+                Grammar.Token t = p.right.get(0).s.get(i);
+                if (!t.getName().equals("ε"))
+                    analyzeStack.push(t);
+                s += t.getName();
+            }
+            action = String.format("POP(), PUSH(%s)", s);
+            finish = false;
+            return false;
+        }
+        finish = true;
+        return true;
+    }
+
+    public boolean isFinish() {
+        return finish;
+    }
+
+    String next(){
+        strP += 1;
+        return String.valueOf(str.charAt(strP));
+    }
+    public String getStr() {
+        String s = "";
+        for (int i = strP; i < str.length(); i++)
+            s += str.charAt(i);
+        return s;
+    }
+
+    public Stack<Grammar.Token> getAnalyzeStack() {
+        return analyzeStack;
+    }
+    public String showFirst(){
+        return g.getFIRS();
+    }
+    public String showFollow(){
+        return g.getFOLLOW();
+    }
+    public String showM(){return g.getM();}
+    public String showAnalyzeStack(){
+        String s = "";
+        Stack<Grammar.Token> temp = (Stack<Grammar.Token>) analyzeStack.clone();
+        while (!temp.empty()){
+            s += temp.peek();
+            temp.pop();
+        }
+        return new StringBuffer(s).reverse().toString();
+    }
+
+    public String getAction() {
+        return action;
+    }
+
+    public String getUseP() {
+        return useP;
+    }
 }
 
-class grammar {
+class Grammar {
     private ArrayList<Token> nontermTokens;
     private ArrayList<Token> termTokens;
     private ArrayList<Production> productions;
     private Production[][] M;
 
-    grammar() throws IOException {
+    Grammar() throws IOException {
         nontermTokens = new ArrayList<>();
         termTokens = new ArrayList<>();
         productions = new ArrayList<>();
         load_resources();
-        M = new Production[nontermTokens.size()][termTokens.size() - 2]; // 排除ε #
+        M = new Production[nontermTokens.size()][termTokens.size()]; // 排除ε
         geneM();
     }
 
@@ -66,7 +176,7 @@ class grammar {
                 return true;
         return false;
     }
-    Token getToken(String s){
+    public Token getToken(String s){
         for (Token t : nontermTokens)
             if (t.getName().equals(s))
                 return t;
@@ -79,37 +189,96 @@ class grammar {
         for (Production p : productions)
             for (Statement s : p.right){
                     s.first();
-                    for (Token termT : termTokens)
+                    for (Token termT : termTokens) {
                         if (termT.terminal && s.FIRST.contains(termT)
                                 && !termT.name.equals("#") && !termT.name.equals("ε"))
                             M[nontermTokens.indexOf(p.left)][termTokens.indexOf(termT)] =
                                     new Production(p.left, s);
+                        if (s.FIRST.contains(getToken("ε")) && termT.name.equals("#"))
+                            M[nontermTokens.indexOf(p.left)][termTokens.indexOf(termT)] =
+                                    new Production(p.left, new Statement("ε"));
+                    }
                     if (s.FIRST.contains(getToken("ε")))
                         for (Token b : p.left.FOLLOW)
                             if (!b.name.equals("#") && !b.name.equals("ε"))
                                 M[nontermTokens.indexOf(p.left)][termTokens.indexOf(b)] =
                                         new Production(p.left, s);
+
             }
     }
     void showM(){
-        System.out.printf("%-8s", ' ');
+        System.out.printf("%-24s", ' ');
         for (Token t : termTokens)
-            System.out.printf("%-8s", t);
+            System.out.printf("%-24s", t);
         System.out.println();
         for (int i=0; i < nontermTokens.size(); i++){
-            System.out.printf("%-8s", nontermTokens.get(i));
-            for (int j=0; j < termTokens.size() - 2; j++) {
+            System.out.printf("%-24s", nontermTokens.get(i));
+            for (int j=0; j < termTokens.size(); j++) {
                 if (M[i][j] != null)
-                    System.out.printf("%-8s", M[i][j]);
+                    System.out.printf("%-24s", M[i][j]);
                 else
-                    System.out.printf("%-8s", '-');
+                    System.out.printf("%-24s", '-');
             }
             System.out.println();
         }
 
     }
+    String getM(){
+        String s = "";
+        s += '\t'; // String.format("%-24s", "");
+        for (Token t : termTokens)
+            s += t.toString() + '\t'; // String.format("%-24s", t);
+        s += '\n';
+        System.out.println();
+        for (int i=0; i < nontermTokens.size(); i++){
+            s += nontermTokens.get(i).toString() + '\t'; // String.format("%-24s", nontermTokens.get(i));
+            for (int j=0; j < termTokens.size(); j++) {
+                if (M[i][j] != null)
+                    s += M[i][j].toString() + '\t'; // String.format("%-24s", M[i][j]);
+                else
+                    s += "-\t"; // String.format("%-24s", '-');
+            }
+            s += '\n';
+        }
+        return s;
+    }
+    int indexOfnonT(String s){
+        for (int i=0; i < nontermTokens.size(); i++)
+            if (nontermTokens.get(i).name.equals(s))
+                return i;
+        return -1;
+    }
+    int indexOftermT(String s){
+        for (int i=0; i < termTokens.size(); i++)
+            if (termTokens.get(i).name.equals(s))
+                return i;
+        return -1;
+    }
+    Production M(int i, int j){
+        return M[i][j];
+    }
+    String getFIRS(){
+        String s = "";
+        for (Token t : nontermTokens) {
+            String first = "";
+            for (Token temp : t.FIRST)
+                first += temp.toString() + " ";
+            s += String.format("FIRST(%s) = { %s }\n", t.name, first);
+        }
+        return s;
+    }
+    String getFOLLOW(){
+        String s = "";
+        for (Token t : nontermTokens) {
+            String follow = "";
+            for (Token temp : t.FOLLOW)
+                follow += temp.toString() + ' ';
+            s += String.format("FOLLOW(%s) = { %s }\n", t.name, follow);
+        }
+        return s;
+    }
     public static void main(String[] args) throws IOException {
-        grammar g = new grammar();
+        Grammar g = new Grammar();
         for (Token t : g.nontermTokens) {
             t.showFIRST();
             t.showFOLLOW();
@@ -172,8 +341,10 @@ class grammar {
                         continue;
                     if (index == s.s.size() - 1 ||
                             index < s.s.size() - 1 && s.s.get(index+1).inFIRST("ε"))
+                        // token位于末尾或不位于末尾且下一个token FIRST中有ε
                         FOLLOW.addAll(p.left.follow());
                     if (index < s.s.size() - 1)
+                        // token不在末尾
                         FOLLOW.addAll(s.s.get(index+1).first());
                 }
             }
@@ -221,6 +392,9 @@ class grammar {
             for (Token t : FOLLOW)
                 System.out.print(t);
             System.out.println();
+        }
+        boolean isTerminal(){
+            return terminal;
         }
 
         public void setGenerate(ArrayList<Statement> generate) {
