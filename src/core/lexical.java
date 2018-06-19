@@ -1,9 +1,10 @@
 package core;
-        import javax.xml.stream.FactoryConfigurationError;
-        import java.io.*;
-        import java.lang.*;
-        import java.util.ArrayList;
-        import java.util.concurrent.ArrayBlockingQueue;
+
+import javax.xml.stream.FactoryConfigurationError;
+import java.io.*;
+import java.lang.*;
+import java.util.ArrayList;
+import java.util.concurrent.ArrayBlockingQueue;
 
 public class lexical {
     private String srcPath;
@@ -26,6 +27,7 @@ public class lexical {
     private String errorMsg;
 
     private Boolean exception;
+    private boolean flag;
 
     public lexical() throws Exception {
         keyw = new ArrayList<>();
@@ -89,6 +91,7 @@ public class lexical {
             System.out.println("未打开源文件");
         }
         move();
+        flag = false;
         while (currentChar != null && currentChar!= '\uffff') {
             if (currentChar == '#') {
                 System.out.println("<" + row + " ," + col + ", #>");
@@ -115,6 +118,13 @@ public class lexical {
             if (currentChar == '\"') {
                 System.out.println("<" + row + " ," + col + ", \">");
                 pre_mark.add(new mark(row, col, "\""));
+                if (!flag) {
+                    move_to("\"", "");
+                    pre_mark.add(new mark(row, col, "\""));
+                    flag = true;
+                    continue;
+                }
+                flag = false;
             }
             getChar();
             move();
@@ -145,9 +155,12 @@ public class lexical {
         strBuffer = "";
     }
     void scanNum() throws Exception {
-        while (Character.isDigit(currentChar)
-                || currentChar == '.' && strBuffer.indexOf('.') == -1)
+        while (Character.isDigit(currentChar) || currentChar == '.')
         {
+            if (strBuffer.indexOf('.') != -1 && currentChar == '.') {
+                raiseError("浮点数错误");
+                exception = true;
+            }
             strBuffer += currentChar;
             getChar();
         }
@@ -245,6 +258,7 @@ public class lexical {
             row += 1;
             col = 1;
             src.mark(65535);
+            getChar();
         }
 
         else if (currentChar == '\t')
@@ -325,7 +339,7 @@ public class lexical {
                     move();
                 }
                 _pre_mark.poll();
-                if (!_pre_mark.isEmpty())
+                   if (!_pre_mark.isEmpty())
                     top_mark = _pre_mark.peek(); //更新top
                 continue;
             }

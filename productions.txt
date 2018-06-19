@@ -1,5 +1,7 @@
-E->TK
-K->+T|ε
-T->FM
-M->*F|ε
-F->(E)|i
+G->E
+E->E+T
+E->T
+T->T*F
+T->F
+F->(E)
+F->i

@@ -21,12 +21,15 @@ public class lexical_gui {
         root.setPreferredSize(new Dimension(800, 600));
         out.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
         in.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+//        input.setFont(new Font("console", Font.PLAIN, 14));
+//        output.setFont(new Font("console", Font.PLAIN, 14));
         input.setLineWrap(true);
         run.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 String src = input.getText();
                 try {
+                    output.setText("");
                     FileWriter fw = new FileWriter("source.c");
                     fw.write(src);
                     fw.close();
@@ -34,6 +37,7 @@ public class lexical_gui {
                     l.load_src_file("source.c");
                     l.pre_handle();
                     l.analyze();
+                    output.append("单词\t二元序列\t类 型\t位置（行，列）\n");
                     for (lexical.token token : l.getTokens())
                         output.append(token.toString());
                     if (l.getErrorMsg() != null)

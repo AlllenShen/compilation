@@ -2,12 +2,15 @@ package core;
 
 import jdk.nashorn.internal.runtime.regexp.joni.exception.ValueException;
 
+import javax.xml.stream.FactoryConfigurationError;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Stack;
 
+// i+i-(i*i/(i+(i-i))
 public class LL1 {
     private String str;
     private Stack<Grammar.Token> analyzeStack;
@@ -93,9 +96,6 @@ public class LL1 {
         return s;
     }
 
-    public Stack<Grammar.Token> getAnalyzeStack() {
-        return analyzeStack;
-    }
     public String showFirst(){
         return g.getFIRS();
     }
@@ -123,9 +123,9 @@ public class LL1 {
 }
 
 class Grammar {
-    private ArrayList<Token> nontermTokens;
-    private ArrayList<Token> termTokens;
-    private ArrayList<Production> productions;
+    protected ArrayList<Token> nontermTokens;
+    protected ArrayList<Token> termTokens;
+    protected ArrayList<Production> productions;
     private Production[][] M;
 
     Grammar() throws IOException {
@@ -133,7 +133,7 @@ class Grammar {
         termTokens = new ArrayList<>();
         productions = new ArrayList<>();
         load_resources();
-        M = new Production[nontermTokens.size()][termTokens.size()]; // 排除ε
+        M = new Production[nontermTokens.size()][termTokens.size()];
         geneM();
     }
 
@@ -146,17 +146,23 @@ class Grammar {
         for (String tw : lineBuffer.split(" "))
             termTokens.add(new Token(tw, true));
         BufferedReader produ_f = new BufferedReader(new FileReader("productions.txt"));
-        while ((lineBuffer = produ_f.readLine()) != null)
+        while ((lineBuffer = produ_f.readLine()) != null){
+            String left = lineBuffer.split("->")[0];
+            String right = lineBuffer.split("->")[1];
             productions.add(new Production(lineBuffer.split("->")[0], lineBuffer.split("->")[1]));
-        for (Production p : productions){
-            for (Token t : nontermTokens)
-                if (t.equals(p.left)){
-                    t.setGenerate(p.right);
-                    continue;
+        }
+        out: for (Production p : productions){
+            for (Token t : nontermTokens) {
+                if (t.toString().equals(p.left.toString())) {
+                    for (Statement s : p.right)
+                        t.generate.add(new Statement(s.s));
+                    continue out;
                 }
+            }
             for (Token t : termTokens)
                 if (t.equals(p.left))
-                    t.setGenerate(p.right);
+                    for (Statement s : p.right)
+                        t.generate.add(new Statement(s.s));
         }
         for (Token t : nontermTokens) {
             t.first();
@@ -254,6 +260,23 @@ class Grammar {
                 return i;
         return -1;
     }
+    int indexOfProduction(Production p){
+        for (int i = 0; i < productions.size(); i++){
+            Production pr = productions.get(i);
+            if (p.same(pr))
+                return i;
+            else
+                for (Statement s : pr.right)
+                    if (p.equals(new Production(pr.left, s)))
+                        return i;
+        }
+        return -1;
+    }
+    Production getProductionAt(int i){
+        if (i >= productions.size())
+            return null;
+        return productions.get(i);
+    }
     Production M(int i, int j){
         return M[i][j];
     }
@@ -277,7 +300,7 @@ class Grammar {
         }
         return s;
     }
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
         Grammar g = new Grammar();
         for (Token t : g.nontermTokens) {
             t.showFIRST();
@@ -286,13 +309,20 @@ class Grammar {
         g.showM();
     }
 
-    class Token { //标识符
+    class Token  { //标识符
         private String name;
         private Boolean terminal;
         private ArrayList<Statement> generate;
         private ArrayList<Token> FIRST;
         private ArrayList<Token> FOLLOW;
         // 构造函数
+        Token(){
+            name = "";
+            terminal = false;
+            generate = new ArrayList<>();
+            FIRST = new ArrayList<>();
+            FOLLOW = new ArrayList<>();
+        }
         Token(String n, Boolean t, ArrayList<Statement> g) {
             name = n;
             terminal = t;
@@ -313,8 +343,18 @@ class Grammar {
                 FIRST.add(this);
                 return FIRST;
             }
-            int i = 0;
-            for (Statement state : generate){ // 算法初步测试通过 需要其他测试用例
+            for (Statement state : generate){
+                int i = 0;
+                if (state.get(0).isTerminal()) {
+                    FIRST.add(state.get(0));
+                    continue;
+                }
+                try {
+                    if (state.s.get(i).equals(this))
+                        continue;
+                }catch (IndexOutOfBoundsException e){
+                    continue;
+                }
                 FIRST.addAll(state.s.get(i).first());
                 //if (FIRST.contains(getToken("ε")))
                 // 如果当前项包含空串 向下一个token递归
@@ -408,6 +448,16 @@ class Grammar {
         public String toString() {
             return name;
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            try {
+                Token t = (Token) obj;
+                return name.equals(t.name) && terminal.equals(t.terminal);
+            }catch (java.lang.ClassCastException e){
+                return false;
+            }
+        }
     }
     class Statement { // 语句
         ArrayList<Token> s;
@@ -415,6 +465,7 @@ class Grammar {
 
         Statement(ArrayList<Token> s_){
             s = s_;
+            FIRST = new ArrayList<>();
         }
         Statement(String s_){
             s = new ArrayList<>();
@@ -444,6 +495,18 @@ class Grammar {
             }
             return FIRST;
         }
+        public Token get(int i){
+            if (i < 0)
+                return null;
+            if (i < s.size())
+                return s.get(i);
+            else
+                return getToken("ε");
+
+        }
+        public int size(){
+            return s.size();
+        }
 
         @Override
         public String toString() {
@@ -452,31 +515,70 @@ class Grammar {
                 str.append(t.getName());
             return str.toString();
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            try {
+                Statement st = (Statement) obj;
+                if (s.size() != st.size())
+                    return false;
+                for (int i = 0; i < s.size(); i++)
+                    if (!s.get(i).equals(st.get(i)))
+                        return false;
+                return true;
+            }catch (ClassCastException e){
+                return false;
+            }
+        }
     }
     class Production { // 产生式
         Token left;
         ArrayList<Statement> right;
+        boolean geneFirst;
+        boolean geneFollow;
 
+        Production(){
+            left = new Token();
+            right = new ArrayList<>();
+            geneFirst = false;
+            geneFollow = false;
+        }
         Production(Token l, Statement r){
             left = l;
             right = new ArrayList<>();
             right.add(r);
+            geneFirst = false;
+            geneFollow = false;
         }
         Production(String l, String r) {
             if (!isTokens(l))
                 throw new ValueException("标识符错误: " + l);
             right = new ArrayList<>();
-            ArrayList<String> r_strings = new ArrayList<>();
             if (r.contains("|"))
                 for (String state : r.split("\\|"))
                     right.add(new Statement(state));
             else
                 right.add(new Statement(r));
             left = getToken(l);
+            geneFirst = false;
+            geneFollow = false;
         }
 
         public Token getLeft() {
             return left;
+        }
+
+        public boolean same(Production p){
+            // 用于与子类比较
+            if (!left.equals(p.left))
+                return false;
+            out: for (Statement s : p.right){
+                for (Statement st : right)
+                    if (st.equals(s))
+                        continue out;
+                return false; // 没有匹配才会运行
+            }
+            return true;
         }
 
         @Override
@@ -490,6 +592,22 @@ class Grammar {
             }
             return s;
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            if ( this == obj ) return true;
+            if ( obj == null || obj.getClass() != this.getClass() ) return false;
+            Production p = (Production) obj;
+            if (!left.equals(p.left))
+                return false;
+            out: for (Statement s : p.right){
+                for (Statement st : right)
+                    if (st.equals(s))
+                        continue out;
+                return false; // 没有匹配才会运行
+            }
+            return true;
+        }
     }
 }
 
@@ -498,5 +616,26 @@ class Grammar {
 //T->FS
 //S->*FS|/FS|ε
 //F->(E)|i|ε
+
+//E->TK
+//K->+T|ε
+//T->FM
+//M->*F|ε
+//F->(E)|i
+
 //E T G T S F
 //( ) i + - ε * / ε #
+
+//E K T M F
+
+//G->S
+//S->BB
+//B->aB
+//B->b
+
+//E->E+T
+//E->T
+//T->T*F
+//T->F
+//F->(E)
+//F->i
